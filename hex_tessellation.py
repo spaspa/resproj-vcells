@@ -10,12 +10,12 @@ class PixelMap:
     def __init__(self, image_size):
         self._pixel_map = np.zeros(image_size)
 
-    def set(self, pixel, superpixel_id):
-        if (superpixel_id == 0):
-            raise ValueError('superpixel id should not be zero')
+    def set(self, pixel, segment_id):
+        if (segment_id == 0):
+            raise ValueError('segment id should not be zero')
         shape = self._pixel_map.shape
         if 0 <= pixel[0] < shape[0] and 0 <= pixel[1] < shape[1]:
-            self._pixel_map[pixel] = superpixel_id
+            self._pixel_map[pixel] = segment_id
 
     def get(self, pixel):
         shape = self._pixel_map.shape
@@ -24,7 +24,7 @@ class PixelMap:
         return None
 
 
-class Superpixel:
+class Segment:
     def __init__(self):
         self.pixels = set()
         self.edges = set()
@@ -37,7 +37,7 @@ class Superpixel:
 
 class Tessellator:
     def __init__(self, image_size, cell_size):
-        self.superpixel_list = []
+        self.segment_list = []
         self.pixel_map = PixelMap(image_size)
         self.image_width = image_size[0]
         self.image_height = image_size[1]
@@ -58,20 +58,20 @@ class Tessellator:
         return p2, p3, p4, p5, p6
 
     def generate_hexagon_pixels(self, p1):
-        self.superpixel_list.append(Superpixel())
+        self.segment_list.append(Segment())
 
         def generate_body(y, x1, x2):
             return ((x, y) for x in range(floor(x1), ceil(x2)))
 
         def append_pixel(pixel, edge=False):
-            superpixel = self.superpixel_list[-1]
-            superpixel_id = len(self.superpixel_list)
+            segment = self.segment_list[-1]
+            segment_id = len(self.segment_list)
             if self.pixel_map.get(pixel):
-                # If the pixel is already assigned to a superpixel,
+                # If the pixel is already assigned to a segment,
                 # move the pixel to the right.
                 pixel = (pixel[0] + 1, pixel[1])
-            superpixel.add(pixel, edge)
-            self.pixel_map.set(pixel, superpixel_id)
+            segment.add(pixel, edge)
+            self.pixel_map.set(pixel, segment_id)
 
         p2, p3, p4, p5, p6 = self.generate_hexagon_vertexes(p1)
 
@@ -127,7 +127,7 @@ def run():
     pixels = image.load()
     tessellator = Tessellator((width, height), size)
 
-    for i, superpixel in enumerate(tessellator.superpixel_list):
+    for i, segment in enumerate(tessellator.segment_list):
         if i < 256:
             color = (255 - i, 0, 255)
         elif 256 <= i < 512:
@@ -137,7 +137,7 @@ def run():
         c = randint(0, 255)
         color = (c, c, 255)
 
-        for x, y in superpixel.pixels:
+        for x, y in segment.pixels:
             if 0 <= x < width and 0 <= y < height:
                 if (pixels[x, y] != (0, 0, 0)):
                     pixels[x, y] = (255, 0, 0)
