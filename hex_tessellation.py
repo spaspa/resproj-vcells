@@ -4,35 +4,63 @@ from math import (
 from PIL import Image
 import numpy as np
 from random import randint
+import itertools
+
+
+def dist2(p1, p2):
+    return (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2
 
 
 class PixelMap:
     def __init__(self, image_size):
-        self._pixel_map = np.zeros(image_size)
+        self._pixel_map = np.empty(image_size, dtype='int32')
+        # top, right, bottom, left
+        self._neighbors_map = np.full((image_size[0], image_size[1], 4), -1, dtype='int32')
+        self.has_neighbor_set = False
+        self.image_width = image_size[0]
+        self.image_height = image_size[1]
 
     def set(self, pixel, segment_id):
-        if (segment_id == 0):
-            raise ValueError('segment id should not be zero')
-        shape = self._pixel_map.shape
-        if 0 <= pixel[0] < shape[0] and 0 <= pixel[1] < shape[1]:
-            self._pixel_map[pixel] = segment_id
+        x, y = pixel
+        if 0 <= x < self.image_width and 0 <= y < self.image_height:
+            self._pixel_map[x, y] = segment_id
+        if self.has_neighbor_set:
+            self.set_neighbor(x, y-1, 2, segment_id)
+            self.set_neighbor(x+1, y, 3, segment_id)
+            self.set_neighbor(x, y+1, 0, segment_id)
+            self.set_neighbor(x-1, y, 1, segment_id)
 
     def get(self, pixel):
-        shape = self._pixel_map.shape
-        if 0 <= pixel[0] < shape[0] and 0 <= pixel[1] < shape[1]:
+        if 0 <= pixel[0] < self.image_width and 0 <= pixel[1] < self.image_height:
             return self._pixel_map[pixel]
-        return None
+        return -1
+        
+    def is_edge(self, pixel):
+        if 0 <= pixel[0] < self.image_width and 0 <= pixel[1] < self.image_height:
+            segment_id = self.get(pixel)
+            return any([n != segment_id and n != -1 for n in self.get_neighbors(pixel)])   
+        return False
+    
+    def get_neighbors(self, pixel):
+        return self._neighbors_map[pixel]
+        
+    def set_neighbor(self, pixel, direction, segment_id):
+        if (0 <= pixel[0] < self.image_width
+                and 0 <= pixel[1] < self.image_height
+                and 0 <= direction <= 3):
+            self._neighbors_map[pixel[0], pixel[1], direction] = segment_id
 
 
 class Segment:
     def __init__(self):
-        self.pixels = set()
-        self.edges = set()
+        self.pixels = []
+        self.edges = []
 
-    def add(self, pixel, edge=False):
+    def add(self, pixel, edge=False, body=True):
         if edge:
-            self.edges.add(pixel)
-        self.pixels.add(pixel)
+            self.edges.append(pixel)
+        if body:
+            self.pixels.append(pixel)
 
 
 class Tessellator:
@@ -44,88 +72,70 @@ class Tessellator:
         self.cell_size = cell_size
         self.tessellate()
 
-    #   p2 p3
-    # p1     p4
-    #   p6 p5
-    def generate_hexagon_vertexes(self, p1=(0, 0)):
-        size = self.cell_size
-        h = size * sin(pi/3)
-        p2 = (p1[0] + ceil(size/2), ceil(p1[1] - h))
-        p6 = (p1[0] + ceil(size/2), ceil(p1[1] + h))
-        p4 = (p1[0] + 2*size, p1[1])
-        p3 = (p4[0] - ceil(size/2), ceil(p4[1] - h))
-        p5 = (p4[0] - ceil(size/2), ceil(p4[1] + h))
-        return p2, p3, p4, p5, p6
-
-    def generate_hexagon_pixels(self, p1):
-        self.segment_list.append(Segment())
-
-        def generate_body(y, x1, x2):
-            return ((x, y) for x in range(floor(x1), ceil(x2)))
-
-        def append_pixel(pixel, edge=False):
-            segment = self.segment_list[-1]
-            segment_id = len(self.segment_list)
-            if self.pixel_map.get(pixel):
-                # If the pixel is already assigned to a segment,
-                # move the pixel to the right.
-                pixel = (pixel[0] + 1, pixel[1])
-            segment.add(pixel, edge)
-            self.pixel_map.set(pixel, segment_id)
-
-        p2, p3, p4, p5, p6 = self.generate_hexagon_vertexes(p1)
-
-        # upper and lower edge
-        for p in generate_body(p2[1] - 1, p2[0] - 1, p3[0]):
-            append_pixel(p, edge=True)
-        for p in generate_body(p6[1] - 1, p6[0] - 1, p5[0]):
-            append_pixel(p, edge=True)
-
-        append_pixel((p1[0] - 1, p1[1]), edge=True)
-        append_pixel((p4[0] - 1, p4[1]), edge=True)
-        body_pixels_middle = generate_body(p1[1], p1[0] - 1, p4[0] - 1)
-        for pixel in body_pixels_middle:
-            append_pixel(pixel)
-
-        for y in range(p2[1], p1[1]):
-            dy = y - p2[1]
-            dx = dy / tan(pi/3)
-            append_pixel((floor(p2[0] - dx - 1), y), edge=True)
-            append_pixel((floor(p3[0] + dx), y), edge=True)
-            body_pixels_upper = generate_body(y,
-                                              floor(p2[0] - dx - 1),
-                                              floor(p3[0] + dx))
-            for pixel in body_pixels_upper:
-                append_pixel(pixel)
-            if y != p2[1]:
-                append_pixel((floor(p2[0] - dx - 1), p1[1]*2 - y), edge=True)
-                append_pixel((floor(p3[0] + dx), p1[1]*2 - y), edge=True)
-                body_pixels_lower = generate_body(p1[1]*2 - y,
-                                                  floor(p2[0] - dx - 1),
-                                                  floor(p3[0] + dx))
-                for pixel in body_pixels_lower:
-                    append_pixel(pixel)
-
     def tessellate(self):
-        h = self.cell_size * sin(pi/3)
-        origin = [-self.cell_size, ceil(h)]
-        for i in range(ceil(self.image_width / self.cell_size)):
-            for j in range(ceil(self.image_height / self.cell_size)):
-                self.generate_hexagon_pixels(origin)
-                p6_prev_y = ceil(origin[1] + h)
-                origin[1] = ceil(p6_prev_y + h)
-            origin[0] = ceil(origin[0] + self.cell_size * 3/2) + 1
-            origin[1] = 0 if i % 2 == 0 else ceil(h)
+        grid_width = self.cell_size * 3/2
+        grid_height = self.cell_size * sin(pi/3)
+
+        # 偶数列目の六角形の個数
+        hex_cols_even = ceil((ceil(self.image_height / grid_height) - 1) / 2)
+        # 奇数列目の六角形の個数
+        hex_cols_odd = floor((ceil(self.image_height / grid_height) - 1) / 2)
+
+        def get_hex_index(i, j):
+            assert (i + j) % 2 == 0
+            past_rows = i // 2 * (hex_cols_even + hex_cols_odd)
+            if i % 2 == 1:
+                past_rows += hex_cols_even
+            return past_rows + j//2 + 1
+
+        for x, y in itertools.product(range(self.image_width), range(self.image_height)):
+            i = floor(x / grid_width)
+            j = floor(y / grid_height)
+            segment_index = -1
+            if (i + j) % 2 == 0:
+                topleft = (i * grid_width, j * grid_height)
+                bottomright = ((i + 1) * grid_width, (j + 1) * grid_height)
+                if (dist2((x, y), topleft) <= dist2((x, y), bottomright)):
+                    segment_index = get_hex_index(i, j)
+                else:
+                    segment_index = get_hex_index(i+1, j+1)
+            else:
+                topright = ((i + 1) * grid_width, j * grid_height)
+                bottomleft = (i * grid_width, (j + 1) * grid_height)
+                if (dist2((x, y), topright) <= dist2((x, y), bottomleft)):
+                    segment_index = get_hex_index(i+1, j)
+                else:
+                    segment_index = get_hex_index(i, j+1)
+
+            while len(self.segment_list) <= segment_index:
+                self.segment_list.append(Segment())
+            self.segment_list[segment_index].add((x, y))
+            self.pixel_map.set((x, y), segment_index)
+
+            self.pixel_map.set_neighbor((x, y-1), 2, segment_index)
+            self.pixel_map.set_neighbor((x+1, y), 3, segment_index)
+            self.pixel_map.set_neighbor((x, y+1), 0, segment_index)
+            self.pixel_map.set_neighbor((x-1, y), 1, segment_index)
+
+            if self.pixel_map.is_edge((x-1, y)):
+                left_segment_id = self.pixel_map.get((x-1, y))
+                self.segment_list[left_segment_id].add((x-1, y), edge=True, body=False)
+
+        for y in range(self.image_height):
+            if self.pixel_map.is_edge((self.image_width-1, y)):
+                left_segment_id = self.pixel_map.get((self.image_width-1, y))
+                self.segment_list[left_segment_id].add((self.image_width-1, y), edge=True, body=False)
 
 
 def run():
-    width = 640
-    height = 640
-    size = 20
+    width = 512
+    height = 512
+    size = 10
 
     image = Image.new('RGB', (width, height))
     pixels = image.load()
     tessellator = Tessellator((width, height), size)
+    
 
     for i, segment in enumerate(tessellator.segment_list):
         if i < 256:
@@ -135,14 +145,10 @@ def run():
         else:
             color = (0, 255, 255 - i + 512)
         c = randint(0, 255)
-        color = (c, c, 255)
+        # color = (c, c, 255)
 
-        for x, y in segment.pixels:
-            if 0 <= x < width and 0 <= y < height:
-                if (pixels[x, y] != (0, 0, 0)):
-                    pixels[x, y] = (255, 0, 0)
-                else:
-                    pixels[x, y] = color
+        for x, y in segment.edges:
+            pixels[x, y] = color
 
     image.show()
 
