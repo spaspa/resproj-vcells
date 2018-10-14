@@ -6,6 +6,7 @@ name = "pypi"
 [packages]
 pillow = "*"
 numpy = "*"
+numba = "*"
 
 [dev-packages]
 
