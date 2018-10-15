@@ -4,28 +4,32 @@ from PIL import Image
 from itertools import product
 from tessellator import Tessellator
 from util import top_of, right_of, bottom_of, left_of
-from random import randint
+import pyximport
+pyximport.install(setup_args={'include_dirs': [np.get_include()]})
+from vcells_lib import dist, calc_color_centroid # noqa
 
 
 class OriginalImage:
     def __init__(self, path):
         self._original_image = Image.open(path)
+        self.raw_pixel = np.asarray(self._original_image, dtype=np.int32)
         self.image = Image.open(path)
         self.pixels = self.image.load()
         self.path = path
+        self.animation_list = []
 
     @property
     def size(self):
         return self._original_image.size
 
     def clear_boundary(self):
+        self.animation_list.append(self.image)
         self.image = Image.open(self.path)
         self.pixels = self.image.load()
 
     def set_boundary(self, segment_list, color=(0, 255, 0)):
         self.clear_boundary()
         for segment in segment_list:
-#             color = (randint(0, 255), 0, 0)
             for x, y in segment.edges:
                 if (0 <= x < self.size[0]
                         and 0 <= y < self.size[1]):
@@ -37,11 +41,20 @@ class OriginalImage:
     def show(self):
         self.image.show()
 
+    def save(self, path):
+        self.image.save(path)
+
     def calc_segment_color_centroid(self, segment):
-        s = np.zeros_like(self._original_image.getpixel((0, 0)))
-        for pixel in segment.pixels:
-            s += np.array(self._original_image.getpixel(pixel))
-        return s / len(segment.pixels)
+        conv = np.array(list(segment.pixels), dtype=np.int32)
+        return calc_color_centroid(conv, self.raw_pixel)
+
+    def save_animation(self, path):
+        self._original_image.save(path,
+                                  save_all=True,
+                                  optimize=False,
+                                  duration=200,
+                                  loop=0,
+                                  append_images=self.animation_list)
 
 
 class VCells:
@@ -56,7 +69,7 @@ class VCells:
                         if p[0]**2 + p[1] ** 2 <= radius ** 2]
 
         self.pixels_in_N_omega = len(N_omega_base)
-        self.N_omega = np.array(N_omega_base)
+        self.N_omega = np.array(N_omega_base, dtype=np.int32)
 
         for segment in self.tessellator.segment_list:
             c = self.image.calc_segment_color_centroid(segment)
@@ -65,26 +78,20 @@ class VCells:
         self.image.set_boundary(self.tessellator.segment_list)
         self.done = False
 
-    def dist(self, pixel, segment):
-        color_dist = np.linalg.norm(self.image.getpixel(pixel) -
-                                    segment.color_centroid)
-
-        N_omega_p = np.array(self.N_omega)
-        N_omega_p[:, 0] += pixel[0]
-        N_omega_p[:, 1] += pixel[1]
-
-        seg_N_omega = [p for p in N_omega_p
-                       if self.tessellator.pixel_map.get(tuple(p)) == segment.index]
-        n_k_of_p = self.pixels_in_N_omega - len(seg_N_omega)
-        return sqrt(color_dist**2 + 2 * self.weight * n_k_of_p)
-
     def iteration(self):
         self.done = True
-        i = -1
+        pixels_moved = 0
         for pixel in self.tessellator.boundaries:
             neighbors = self.tessellator.pixel_map.get_neighbors(pixel)
             min_neighbor_index = np.array(
-                [self.dist(pixel, self.tessellator.segment_list[n])
+                [dist(pixel[0], pixel[1],
+                      self.tessellator.segment_list[n].color_centroid,
+                      self.N_omega,
+                      self.tessellator.pixel_map.get_raw_pixel_map(),
+                      self.image.raw_pixel,
+                      self.tessellator.segment_list[n].index,
+                      self.pixels_in_N_omega,
+                      self.weight)
                  for n in neighbors]
             ).argmin()
             min_neighbor = neighbors[min_neighbor_index]
@@ -92,8 +99,8 @@ class VCells:
             current_segment_index = self.tessellator.pixel_map.get(pixel)
 
             if min_neighbor != current_segment_index and min_neighbor != -1:
-                i += 1
-#                 print(pixel, "move:", current_segment_index, "->", min_neighbor, min_neighbor_index)
+                pixels_moved += 1
+                # print(pixel, "move:", current_segment_index, "->", min_neighbor, min_neighbor_index)
                 self.done = False
 
                 self.tessellator.pixel_map.set(pixel, min_neighbor)
@@ -121,26 +128,28 @@ class VCells:
                     n_seg.remove_edge(left_of(pixel))
                     c_seg.add(right_of(pixel), edge=True, body=False)
 
+        return pixels_moved
+
     def set_boundary(self):
-        self.image.clear_boundary()
         self.image.set_boundary(self.tessellator.segment_list)
 
     def run(self, num_iter):
-        for _ in range(num_iter):
-            self.iteration()
+        for i in range(num_iter):
+            moved = self.iteration()
+            print(f"iter {i}: {moved} pixel moved")
             self.set_boundary()
-#             self.image.show()
             if self.done:
                 return
 
 
 def run():
-    vcells = VCells("sample.bmp", 15, 100)
-#     vcells = VCells("image_small.png", 10, 300)
+#     vcells = VCells("sample.bmp", 20, 10)
+    vcells = VCells("image.png", 10, 300)
     try:
-        vcells.run(10000)
+        vcells.run(100)
     except KeyboardInterrupt:
         vcells.set_boundary()
+    vcells.image.save_animation("result.gif")
     vcells.image.show()
 
 

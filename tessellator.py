@@ -12,11 +12,11 @@ def dist2(p1, p2):
 
 class PixelMap:
     def __init__(self, image_size):
-        self._pixel_map = np.empty(image_size, dtype='int32')
+        self._pixel_map = np.empty(image_size, dtype=np.int32)
         # top, right, bottom, left
         self._neighbors_map = np.full((image_size[0], image_size[1], 4),
                                       fill_value=-1,
-                                      dtype='int32')
+                                      dtype=np.int32)
         self.has_neighbor_set = False
         self.image_width = image_size[0]
         self.image_height = image_size[1]
@@ -33,6 +33,9 @@ class PixelMap:
                 and 0 <= pixel[1] < self.image_height):
             return self._pixel_map[pixel]
         return -1
+
+    def get_raw_pixel_map(self):
+        return self._pixel_map
 
     def is_edge(self, pixel):
         if (0 <= pixel[0] < self.image_width
