@@ -76,6 +76,7 @@ class Segment:
         self.edges = set()
         self.color_centroid = None
         self.index = index
+        self.is_empty = False
 
     def add(self, pixel, edge=False, body=True):
         if edge:
@@ -110,6 +111,8 @@ class Tessellator:
     def boundaries(self):
         lst = []
         for segment in self.segment_list:
+            if segment.is_empty:
+                continue
             lst.extend(segment.pixels)
         for pixel in lst:
             if self.pixel_map.is_edge(pixel):

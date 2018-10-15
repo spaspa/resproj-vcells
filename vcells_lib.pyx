@@ -39,9 +39,9 @@ def dist(int pixel_x,
          int segment_index,
          int pixels_in_N_omega,
          double weight):
-    cdef double color_dist2 = ((segment_centroid[0] - raw_pixel[pixel_x, pixel_y, 0]) ** 2
-                               + (segment_centroid[1] - raw_pixel[pixel_x, pixel_y, 1]) ** 2
-                               + (segment_centroid[2] - raw_pixel[pixel_x, pixel_y, 2]) ** 2)
+    cdef double color_dist2 = ((segment_centroid[0] - raw_pixel[pixel_y, pixel_x, 0]) ** 2
+                               + (segment_centroid[1] - raw_pixel[pixel_y, pixel_x, 1]) ** 2
+                               + (segment_centroid[2] - raw_pixel[pixel_y, pixel_x, 2]) ** 2)
 
     cdef int pixels_seg_n_omega = calc_seg_n_omega(pixel_x,
                                                    pixel_y,
@@ -56,20 +56,20 @@ def dist(int pixel_x,
 
 
 def calc_color_centroid(np.ndarray[DTYPE_I_t, ndim=2] pixels,
-                        np.ndarray[DTYPE_I_t, ndim=3] raw_pixels):
+                        np.ndarray[DTYPE_I_t, ndim=3] raw_pixel):
     cdef int size = pixels.shape[0]
-    cdef int w = raw_pixels.shape[0]
-    cdef int h = raw_pixels.shape[1]
+    cdef int w = raw_pixel.shape[0]
+    cdef int h = raw_pixel.shape[1]
     cdef int i, x, y
-    cdef np.ndarray[DTYPE_F_t, ndim=1] result = np.zeros_like(raw_pixels[0, 0], dtype=DTYPE_F)
+    cdef np.ndarray[DTYPE_F_t, ndim=1] result = np.zeros_like(raw_pixel[0, 0], dtype=DTYPE_F)
 
     for i in range(size):
         x = pixels[i, 0]
         y = pixels[i, 1]
         if x < w and y < h:
-            result[0] += raw_pixels[x, y, 0]
-            result[1] += raw_pixels[x, y, 1]
-            result[2] += raw_pixels[x, y, 2]
+            result[0] += raw_pixel[y, x, 0]
+            result[1] += raw_pixel[y, x, 1]
+            result[2] += raw_pixel[y, x, 2]
 
     result[0] /=  size
     result[1] /=  size

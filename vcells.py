@@ -5,7 +5,8 @@ from itertools import product
 from tessellator import Tessellator
 from vcells_util import (
     top_of, right_of, bottom_of, left_of,
-    direct_neighbors_of
+    direct_neighbors_of,
+    dist_2_neighbors_of
 )
 import pyximport
 pyximport.install(setup_args={'include_dirs': [np.get_include()]})
@@ -33,7 +34,7 @@ class OriginalImage:
     def set_boundary(self, segment_list, color=(0, 255, 0)):
         self.clear_boundary()
         for segment in segment_list:
-            color = (0, segment.index, 0)
+#             color = (0, segment.index * 19 % 256, 0)
             for x, y in segment.edges:
                 if (0 <= x < self.size[0]
                         and 0 <= y < self.size[1]):
@@ -52,11 +53,11 @@ class OriginalImage:
         conv = np.array(list(segment.pixels), dtype=np.int32)
         return calc_color_centroid(conv, self.raw_pixel)
 
-    def save_animation(self, path):
+    def save_animation(self, path, duration=100):
         self._original_image.save(path,
                                   save_all=True,
                                   optimize=False,
-                                  duration=200,
+                                  duration=duration,
                                   loop=0,
                                   append_images=self.animation_list)
 
@@ -90,7 +91,7 @@ class VCells:
     def iteration(self):
         self.done = True
         pixels_moved = 0
-        w, h, _ = self.image.raw_pixel.shape
+        h, w, _ = self.image.raw_pixel.shape
         for pixel in self.tessellator.boundaries:
             if pixel[0] >= w or pixel[1] >= h:
                 continue
@@ -121,7 +122,9 @@ class VCells:
                 c_seg = self.tessellator.segment_list[current_segment_index]
                 c_seg.remove(pixel)
 
-                if len(c_seg.pixels) != 0:
+                if len(c_seg.pixels) == 0:
+                    c_seg.empty = True
+                else:
                     c_seg_c = self.image.calc_segment_color_centroid(c_seg)
                     c_seg.color_centroid = c_seg_c
 
@@ -130,18 +133,14 @@ class VCells:
                 n_seg_c = self.image.calc_segment_color_centroid(n_seg)
                 n_seg.color_centroid = n_seg_c
 
-                for i, n in enumerate(direct_neighbors_of(pixel)):
+                for i, n in enumerate(dist_2_neighbors_of(pixel)):
+#                 for i, n in enumerate(direct_neighbors_of(pixel)):
                     seg = self.get_segment_of(n)
                     if self.tessellator.pixel_map.is_edge(n):
                         seg.add(n, edge=True, body=False)
-#                         print("edge-", end="")
                     else:
                         seg.remove_edge(n)
-#                         print("non-edge-", end="")
-#                     print(f"pixel:{n} {i} of {pixel}\n"
-#                           f"   {self.tessellator.pixel_map.get(top_of(n))}\n"
-#                           f"{self.tessellator.pixel_map.get(left_of(n))}    {self.tessellator.pixel_map.get(right_of(n))}\n"
-#                           f"   {self.tessellator.pixel_map.get(bottom_of(n))}\n")
+#                 self.set_boundary()
 
         return pixels_moved
 
@@ -158,8 +157,9 @@ class VCells:
 
 
 def run():
-#     vcells = VCells("sample.bmp", 20, 500)
-    vcells = VCells("image.png", 10, 100)
+#     vcells = VCells("sample.bmp", 15, 300)
+#     vcells = VCells("image.png", 20, 400)
+    vcells = VCells("302008.jpg", 10, 300)
     try:
         vcells.run(100)
     except KeyboardInterrupt:
