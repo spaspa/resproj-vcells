@@ -13,11 +13,11 @@ def dist2(p1, p2):
 class PixelMap:
     def __init__(self, image_size):
         self._pixel_map = np.empty(image_size, dtype=np.int32)
+        self._edge_map = np.zeros(image_size, dtype=np.bool)
         # top, right, bottom, left
         self._neighbors_map = np.full((image_size[0], image_size[1], 4),
                                       fill_value=-1,
                                       dtype=np.int32)
-        self.has_neighbor_set = False
         self.image_width = image_size[0]
         self.image_height = image_size[1]
 
@@ -25,8 +25,7 @@ class PixelMap:
         x, y = pixel
         if 0 <= x < self.image_width and 0 <= y < self.image_height:
             self._pixel_map[x, y] = segment_index
-        if self.has_neighbor_set:
-            self.pixel_map.set_around_neighbor_to((x, y), segment_index)
+            self.set_around_neighbor_to((x, y), segment_index)
 
     def get(self, pixel):
         if (0 <= pixel[0] < self.image_width
@@ -36,6 +35,9 @@ class PixelMap:
 
     def get_raw_pixel_map(self):
         return self._pixel_map
+
+    def set_edge(self, pixel, edge: bool):
+        self._edge_map[pixel] = edge
 
     def is_edge(self, pixel):
         if (0 <= pixel[0] < self.image_width
@@ -110,7 +112,8 @@ class Tessellator:
         for segment in self.segment_list:
             lst.extend(segment.pixels)
         for pixel in lst:
-            yield pixel
+            if self.pixel_map.is_edge(pixel):
+                yield pixel
         raise StopIteration
 
     def tessellate(self):
@@ -156,8 +159,6 @@ class Tessellator:
 
             self.segment_list[segment_index].add((x, y))
             self.pixel_map.set((x, y), segment_index)
-
-            self.pixel_map.set_around_neighbor_to((x, y), segment_index)
 
             if self.pixel_map.is_edge((x-1, y)):
                 left_segment_id = self.pixel_map.get((x-1, y))

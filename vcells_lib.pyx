@@ -56,17 +56,20 @@ def dist(int pixel_x,
 
 
 def calc_color_centroid(np.ndarray[DTYPE_I_t, ndim=2] pixels,
-                        np.ndarray[DTYPE_I_t, ndim=3] raw_pixel):
+                        np.ndarray[DTYPE_I_t, ndim=3] raw_pixels):
     cdef int size = pixels.shape[0]
+    cdef int w = raw_pixels.shape[0]
+    cdef int h = raw_pixels.shape[1]
     cdef int i, x, y
-    cdef np.ndarray[DTYPE_F_t, ndim=1] result = np.zeros_like(raw_pixel[0, 0], dtype=DTYPE_F)
+    cdef np.ndarray[DTYPE_F_t, ndim=1] result = np.zeros_like(raw_pixels[0, 0], dtype=DTYPE_F)
 
     for i in range(size):
         x = pixels[i, 0]
         y = pixels[i, 1]
-        result[0] += raw_pixel[x, y, 0]
-        result[1] += raw_pixel[x, y, 1]
-        result[2] += raw_pixel[x, y, 2]
+        if x < w and y < h:
+            result[0] += raw_pixels[x, y, 0]
+            result[1] += raw_pixels[x, y, 1]
+            result[2] += raw_pixels[x, y, 2]
 
     result[0] /=  size
     result[1] /=  size

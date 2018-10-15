@@ -3,7 +3,10 @@ import numpy as np
 from PIL import Image
 from itertools import product
 from tessellator import Tessellator
-from util import top_of, right_of, bottom_of, left_of
+from vcells_util import (
+    top_of, right_of, bottom_of, left_of,
+    direct_neighbors_of
+)
 import pyximport
 pyximport.install(setup_args={'include_dirs': [np.get_include()]})
 from vcells_lib import dist, calc_color_centroid # noqa
@@ -30,6 +33,7 @@ class OriginalImage:
     def set_boundary(self, segment_list, color=(0, 255, 0)):
         self.clear_boundary()
         for segment in segment_list:
+            color = (0, segment.index, 0)
             for x, y in segment.edges:
                 if (0 <= x < self.size[0]
                         and 0 <= y < self.size[1]):
@@ -78,10 +82,18 @@ class VCells:
         self.image.set_boundary(self.tessellator.segment_list)
         self.done = False
 
+    def get_segment_of(self, pixel):
+        return self.tessellator.segment_list[
+            self.tessellator.pixel_map.get(pixel)
+        ]
+
     def iteration(self):
         self.done = True
         pixels_moved = 0
+        w, h, _ = self.image.raw_pixel.shape
         for pixel in self.tessellator.boundaries:
+            if pixel[0] >= w or pixel[1] >= h:
+                continue
             neighbors = self.tessellator.pixel_map.get_neighbors(pixel)
             min_neighbor_index = np.array(
                 [dist(pixel[0], pixel[1],
@@ -100,33 +112,36 @@ class VCells:
 
             if min_neighbor != current_segment_index and min_neighbor != -1:
                 pixels_moved += 1
-                # print(pixel, "move:", current_segment_index, "->", min_neighbor, min_neighbor_index)
+#                 print(pixel, "move:", current_segment_index, "->", min_neighbor, min_neighbor_index)
                 self.done = False
 
                 self.tessellator.pixel_map.set(pixel, min_neighbor)
+                self.tessellator.pixel_map.set_around_neighbor_to(pixel, min_neighbor)
 
                 c_seg = self.tessellator.segment_list[current_segment_index]
                 c_seg.remove(pixel)
-                c_seg_c = self.image.calc_segment_color_centroid(c_seg)
-                c_seg.color_centroid = c_seg_c
+
+                if len(c_seg.pixels) != 0:
+                    c_seg_c = self.image.calc_segment_color_centroid(c_seg)
+                    c_seg.color_centroid = c_seg_c
 
                 n_seg = self.tessellator.segment_list[min_neighbor]
                 n_seg.add(pixel, edge=True)
-                n_seg_c = self.image.calc_segment_color_centroid(c_seg)
+                n_seg_c = self.image.calc_segment_color_centroid(n_seg)
                 n_seg.color_centroid = n_seg_c
 
-                if min_neighbor_index == 0:
-                    n_seg.remove_edge(top_of(pixel))
-                    c_seg.add(bottom_of(pixel), edge=True, body=False)
-                elif min_neighbor_index == 1:
-                    n_seg.remove_edge(right_of(pixel))
-                    c_seg.add(left_of(pixel), edge=True, body=False)
-                elif min_neighbor_index == 2:
-                    n_seg.remove_edge(bottom_of(pixel))
-                    c_seg.add(top_of(pixel), edge=True, body=False)
-                elif min_neighbor_index == 3:
-                    n_seg.remove_edge(left_of(pixel))
-                    c_seg.add(right_of(pixel), edge=True, body=False)
+                for i, n in enumerate(direct_neighbors_of(pixel)):
+                    seg = self.get_segment_of(n)
+                    if self.tessellator.pixel_map.is_edge(n):
+                        seg.add(n, edge=True, body=False)
+#                         print("edge-", end="")
+                    else:
+                        seg.remove_edge(n)
+#                         print("non-edge-", end="")
+#                     print(f"pixel:{n} {i} of {pixel}\n"
+#                           f"   {self.tessellator.pixel_map.get(top_of(n))}\n"
+#                           f"{self.tessellator.pixel_map.get(left_of(n))}    {self.tessellator.pixel_map.get(right_of(n))}\n"
+#                           f"   {self.tessellator.pixel_map.get(bottom_of(n))}\n")
 
         return pixels_moved
 
@@ -143,8 +158,8 @@ class VCells:
 
 
 def run():
-#     vcells = VCells("sample.bmp", 20, 10)
-    vcells = VCells("image.png", 10, 300)
+#     vcells = VCells("sample.bmp", 20, 500)
+    vcells = VCells("image.png", 10, 100)
     try:
         vcells.run(100)
     except KeyboardInterrupt:
