@@ -81,7 +81,6 @@ class VCells:
             segment.color_centroid = c
 
         self.image.set_boundary(self.tessellator.segment_list)
-        self.done = False
 
     def get_segment_of(self, pixel):
         return self.tessellator.segment_list[
@@ -89,7 +88,6 @@ class VCells:
         ]
 
     def iteration(self):
-        self.done = True
         pixels_moved = 0
         h, w, _ = self.image.raw_pixel.shape
         for pixel in self.tessellator.boundaries:
@@ -114,7 +112,6 @@ class VCells:
             if min_neighbor != current_segment_index and min_neighbor != -1:
                 pixels_moved += 1
 #                 print(pixel, "move:", current_segment_index, "->", min_neighbor, min_neighbor_index)
-                self.done = False
 
                 self.tessellator.pixel_map.set(pixel, min_neighbor)
                 self.tessellator.pixel_map.set_around_neighbor_to(pixel, min_neighbor)
@@ -134,7 +131,6 @@ class VCells:
                 n_seg.color_centroid = n_seg_c
 
                 for i, n in enumerate(dist_2_neighbors_of(pixel)):
-#                 for i, n in enumerate(direct_neighbors_of(pixel)):
                     seg = self.get_segment_of(n)
                     if self.tessellator.pixel_map.is_edge(n):
                         seg.add(n, edge=True, body=False)
@@ -149,17 +145,22 @@ class VCells:
 
     def run(self, num_iter):
         for i in range(num_iter):
-            moved = self.iteration()
-            print(f"iter {i}: {moved} pixel moved")
-            self.set_boundary()
-            if self.done:
-                return
+            moved = self.step()
+            print(f"iter {i}:", end=" ")
+        if not moved:
+            return
+
+    def step(self):
+        moved = self.iteration()
+        self.set_boundary()
+        print(f"{moved} pixel moved")
+        return moved
 
 
 def run():
-#     vcells = VCells("sample.bmp", 15, 300)
+    vcells = VCells("sample.bmp", 15, 300)
 #     vcells = VCells("image.png", 20, 400)
-    vcells = VCells("302008.jpg", 10, 300)
+#     vcells = VCells("302008.jpg", 10, 300)
     try:
         vcells.run(100)
     except KeyboardInterrupt:
